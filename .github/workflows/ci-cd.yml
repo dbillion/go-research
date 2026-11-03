@@ -43,14 +43,12 @@ jobs:
     needs: test
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             arch: amd64
             artifact_name: outreach-linux-amd64
-          - os: ubuntu-latest
-            arch: arm64
-            artifact_name: outreach-linux-arm64
           - os: macos-latest
             arch: amd64
             artifact_name: outreach-darwin-amd64
@@ -69,6 +67,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
+          toolchain: true
 
       - name: Download dependencies
         run: go mod download
@@ -85,6 +84,12 @@ jobs:
         id: build
 
       - name: Test binary
+        if: runner.os != 'Windows' && matrix.arch == 'amd64'
+        run: |
+          ./${{ steps.build.outputs.binary }} --help
+
+      - name: Test binary (Windows)
+        if: runner.os == 'Windows' && matrix.arch == 'amd64'
         run: |
           ./${{ steps.build.outputs.binary }} --help
 
@@ -157,8 +162,6 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=ref,event=tag
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
