@@ -72,32 +72,47 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Build
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
         env:
-          GOOS: ${{ runner.os == 'Linux' && 'linux' || runner.os == 'macOS' && 'darwin' || 'windows' }}
+          GOOS: ${{ runner.os == 'Linux' && 'linux' || 'darwin' }}
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: '0'
         run: |
           output_name="${{ matrix.artifact_name }}"
           go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "$output_name" .
           echo "binary=$output_name" >> $GITHUB_OUTPUT
-        id: build
+        id: build_unix
 
-      - name: Test binary
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        env:
+          GOOS: windows
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: '0'
+        shell: pwsh
+        run: |
+          $outputName = "${{ matrix.artifact_name }}"
+          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o $outputName .
+          echo "binary=$outputName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        id: build_windows
+
+      - name: Test binary (Unix)
         if: runner.os != 'Windows' && matrix.arch == 'amd64'
         run: |
-          ./${{ steps.build.outputs.binary }} --help
+          ./${{ steps.build_unix.outputs.binary }} --help
 
       - name: Test binary (Windows)
         if: runner.os == 'Windows' && matrix.arch == 'amd64'
+        shell: pwsh
         run: |
-          ./${{ steps.build.outputs.binary }} --help
+          ./${{ steps.build_windows.outputs.binary }} --help
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ${{ steps.build.outputs.binary }}
+          path: ${{ steps.build_unix.outputs.binary != '' && steps.build_unix.outputs.binary || steps.build_windows.outputs.binary }}
           retention-days: 7
 
   release:
